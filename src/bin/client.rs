@@ -44,22 +44,63 @@ async fn main() -> Result<()> {
 }
 
 // Fixed: Using std::thread::sleep instead of tokio's time::sleep
+// fn collect_metrics(system: &System, hostname: &str) -> Result<SystemMetrics> {
+//     // CPU usage
+//     let cpu = system.cpu_load_aggregate()?;
+//     // Use std::thread::sleep instead of tokio's sleep since this isn't an async function
+//     thread::sleep(Duration::from_secs(1));
+//     let cpu_usage = cpu.done()?.user * 100.0;
+    
+//     // Memory usage
+//     let memory = system.memory()?;
+//     let memory_total = memory.total.as_u64();
+//     let memory_used = memory_total - memory.free.as_u64();
+    
+//     // Disk usage (using the root filesystem)
+//     let disk = system.mount_at("/")?;
+//     let disk_total = disk.total.as_u64();
+//     let disk_used = disk_total - disk.free.as_u64();
+    
+//     Ok(SystemMetrics::new(
+//         hostname.to_string(),
+//         cpu_usage,
+//         memory_total,
+//         memory_used,
+//         disk_total,
+//         disk_used,
+//     ))
+// }
+
 fn collect_metrics(system: &System, hostname: &str) -> Result<SystemMetrics> {
-    // CPU usage
-    let cpu = system.cpu_load_aggregate()?;
-    // Use std::thread::sleep instead of tokio's sleep since this isn't an async function
-    thread::sleep(Duration::from_secs(1));
-    let cpu_usage = cpu.done()?.user * 100.0;
+    // CPU usage - handle platforms differently
+    let cpu_usage = match system.cpu_load_aggregate() {
+        Ok(cpu) => {
+            thread::sleep(Duration::from_secs(1));
+            match cpu.done() {
+                Ok(cpu_stats) => cpu_stats.user * 100.0,
+                Err(_) => 0.0, // Default value if we can't get CPU stats
+            }
+        },
+        Err(_) => 0.0, // Default value if not supported
+    };
     
-    // Memory usage
-    let memory = system.memory()?;
-    let memory_total = memory.total.as_u64();
-    let memory_used = memory_total - memory.free.as_u64();
+    // Memory usage - handle failures gracefully
+    let (memory_total, memory_used) = match system.memory() {
+        Ok(memory) => (memory.total.as_u64(), memory.total.as_u64() - memory.free.as_u64()),
+        Err(_) => (0, 0), // Default values if not supported
+    };
     
-    // Disk usage (using the root filesystem)
-    let disk = system.mount_at("/")?;
-    let disk_total = disk.total.as_u64();
-    let disk_used = disk_total - disk.free.as_u64();
+    // Disk usage - try different paths or fall back to defaults
+    let (disk_total, disk_used) = match system.mount_at("/") {
+        Ok(disk) => (disk.total.as_u64(), disk.total.as_u64() - disk.free.as_u64()),
+        Err(_) => {
+            // On macOS, try a different path
+            match system.mount_at("/System/Volumes/Data") {
+                Ok(disk) => (disk.total.as_u64(), disk.total.as_u64() - disk.free.as_u64()),
+                Err(_) => (0, 0), // Default values if not supported
+            }
+        }
+    };
     
     Ok(SystemMetrics::new(
         hostname.to_string(),
