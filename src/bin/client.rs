@@ -43,34 +43,6 @@ async fn main() -> Result<()> {
     }
 }
 
-// Fixed: Using std::thread::sleep instead of tokio's time::sleep
-// fn collect_metrics(system: &System, hostname: &str) -> Result<SystemMetrics> {
-//     // CPU usage
-//     let cpu = system.cpu_load_aggregate()?;
-//     // Use std::thread::sleep instead of tokio's sleep since this isn't an async function
-//     thread::sleep(Duration::from_secs(1));
-//     let cpu_usage = cpu.done()?.user * 100.0;
-    
-//     // Memory usage
-//     let memory = system.memory()?;
-//     let memory_total = memory.total.as_u64();
-//     let memory_used = memory_total - memory.free.as_u64();
-    
-//     // Disk usage (using the root filesystem)
-//     let disk = system.mount_at("/")?;
-//     let disk_total = disk.total.as_u64();
-//     let disk_used = disk_total - disk.free.as_u64();
-    
-//     Ok(SystemMetrics::new(
-//         hostname.to_string(),
-//         cpu_usage,
-//         memory_total,
-//         memory_used,
-//         disk_total,
-//         disk_used,
-//     ))
-// }
-
 fn collect_metrics(system: &System, hostname: &str) -> Result<SystemMetrics> {
     // CPU usage - handle platforms differently
     let cpu_usage = match system.cpu_load_aggregate() {
